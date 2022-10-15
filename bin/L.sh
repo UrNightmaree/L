@@ -29,6 +29,7 @@ Fields:
 
  • clean
    -1 [lua-env] 		The Lua environment folder/tarball that'll be clean, leave blank to clean all"
+	exit
 }
 
 # Fancy stdoutt
@@ -40,68 +41,100 @@ tcolor() {
 }
 
 fancy_echo() {
-	local dotc=$(tcolor 249) # Stands for "dot color"
-	local prefc=$(tcolor 12)
-	local msgc=$(tcolor 245)
+	local dotc;dotc=$(tcolor 249) # Stands for "dot color"
+	local prefc;prefc=$(tcolor 12)
+	local msgc;msgc=$(tcolor 245)
 
 	echo "${dotc}•${reset} ${prefc}${1}:${reset} ${msgc}${2}${reset}"
 }
 
 fancy_err() {
-	local xc=$(tcolor 160) # Stands for "x color"
-	local prefc=$(tcolor 1)
-	local msgc=$(tcolor 245)
+	local xc;xc=$(tcolor 160) # Stands for "x color"
+	local prefc;prefc=$(tcolor 1)
+	local msgc;msgc=$(tcolor 245)
 
 	echo "${xc}x${reset} ${prefc}${1}:${reset} ${msgc}${2}${reset}" >&2
 }
 
 fancy_warn() {
-	local excc=$(tcolor 3) # Stands for "exclamation color"
-	local prefc=$(tcolor 142)
-	local msgc=$(tcolor 245)
+	local excc;excc=$(tcolor 3) # Stands for "exclamation color"
+	local prefc;prefc=$(tcolor 142)
+	local msgc;msgc=$(tcolor 245)
 
 	echo "${excc}!${reset} ${prefc}${1}:${reset} ${msgc}${2}${reset}"
 }
 
 fancy_succ() {
-	local chc=$(tcolor 10) # Stands for "check color"
-	local prefc=$(tcolor 28)
-	local msgc=$(tcolor 245)
+	local chc;chc=$(tcolor 10) # Stands for "check color"
+	local prefc;prefc=$(tcolor 28)
+	local msgc;msgc=$(tcolor 245)
 
 	echo "${chc}√${reset} ${prefc}${1}:${reset} ${msgc}${2}${reset}"
 }
 
 fancy_mkdir() {
 	mkdir -p $1
-	fancy_echo created "created directory at \"$1\""
+	fancy_echo created "created directory \"$1\""
 }
 
-if [[ $# -le 0 ]]; then
-	usage
-fi
+fancy_rmdir() {
+	rm $1 -fr
+	fancy_echo deleted "deleted directory \"$1\""
+}
+
+
+
+
+
+
+
+(( "$#" )) || usage
 
 rootd=~/.L
+
+if [[ ! -e ~/.L ]]; then
+	dir=(tarball gitdir lua luajit luarocks luvit)
+
+	for d in "${dir[@]}"; do
+		fancy_mkdir "${rootd}/${d}"
+	done
+fi
 
 lua_install() {
 	local V=$1
 
 	local upref="https://www.lua.org/ftp"
-	local url="${upref}/lua-$V.tar.gz"
-	local res=$(curl -I -s -o /dev/null -w "%{http_code}" ${url})
+	local res=$(curl -sI -o /dev/null -w "%{http_code}" $upref/lua-$V.tar.gz)
+	
+	echo $V | grep -P '^(\d\.\d\.0|\d\.0)$' 1>&/dev/null
+
+	if [[ $? -eq 1 ]]; then
+		res=$(curl -sI -o /dev/null -w "%{http_code}" $upref/lua-$V.0.tar.gz)
+		V="$V.0"
+	fi
+
+	echo $V
 
 	if [[ res -eq 200 ]]; then
 		fancy_echo downloading "downloading \"${upref}/lua-$V.tar.gz\""
+		curl -R -o $rootd/tarball/lua-$V.tar.gz --progress-bar $upref/lua-$V.tar.gz
 
-		[[ ! -e ~/.L ]] && fancy_mkdir ~/.L/tarball
-
-		curl -R -o ~/.L/tarball/lua-$V.tar.gz --progress-bar ${url}
 		cd $rootd/tarball
+		fancy_echo extracting "extracting \"${rootd}/tarball/lua-$V.tar.gz\""
 		tar zxf lua-$V.tar.gz
-		cd lua-$V
-		make all local PLATFORM=$(uname)
+
+		if false
+		then
+			mv lua $rootd/lua/$V
+		else
+			[[ -e $rootd/lua/$V ]] &&
+				rm -fr $rootd/lua/$V && mv lua-$V $rootd/lua/$V ||
+				mv lua-$V $rootd/lua/$V
+		fi
+
 	else
 		fancy_err invalid "invalid version \"$V\""
 	fi
 }
 
-lua_install $1
+lua_install $1 

@@ -58,7 +58,7 @@ fancy_err() {
 
 fancy_warn() {
 	local excc;excc=$(tcolor 3) # Stands for "exclamation color"
-	local prefc;prefc=$(tcolor 142)
+	local prefc;prefc=$(tcolor 11)
 	local msgc;msgc=$(tcolor 245)
 
 	echo "${excc}!${reset} ${prefc}${1}:${reset} ${msgc}${2}${reset}"
@@ -82,54 +82,58 @@ fancy_rmdir() {
 	fancy_echo deleted "deleted directory \"$1\""
 }
 
-
-
-
-
-
-
 (( "$#" )) || usage
 
 rootd=~/.L
 
 if [[ ! -e ~/.L ]]; then
+	fancy_warn "find" "cannot find ~/.L"
+	fancy_warn "creating" "creating ~/.L"
 	dir=(tarball gitdir lua luajit luarocks luvit)
 
 	for d in "${dir[@]}"; do
-		fancy_mkdir "${rootd}/${d}"
+		mkdir "${rootd}/${d}" -p
 	done
 fi
 
 lua_install() {
 	local V=$1
+	local ver=$(echo $V | sed -e 's:[^\.[0-9]$::'); echo $ver
+	local rel=$(echo $V | sed 's:^[0-9]\.[0-9]\.::'); echo $rel
+
+	if (( $(echo "$ver < 5.1" | bc -l) )); then
+		fancy_err "not compatible" "building below 5.1 is not compatible!"
+		exit 1
+	fi
+
 
 	local upref="https://www.lua.org/ftp"
 	local res=$(curl -sI -o /dev/null -w "%{http_code}" $upref/lua-$V.tar.gz)
 	
 	echo $V | grep -P '^(\d\.\d\.0|\d\.0)$' 1>&/dev/null
 
-	if [[ $? -eq 1 ]]; then
+	if [[ $? -eq 1 && res -eq 404 ]]; then
 		res=$(curl -sI -o /dev/null -w "%{http_code}" $upref/lua-$V.0.tar.gz)
 		V="$V.0"
 	fi
 
-	echo $V
-
-	if [[ res -eq 200 ]]; then
+	if [[ $res -eq 200 ]]; then
 		fancy_echo downloading "downloading \"${upref}/lua-$V.tar.gz\""
 		curl -R -o $rootd/tarball/lua-$V.tar.gz --progress-bar $upref/lua-$V.tar.gz
 
 		cd $rootd/tarball
 		fancy_echo extracting "extracting \"${rootd}/tarball/lua-$V.tar.gz\""
 		tar zxf lua-$V.tar.gz
+	
 
-		if false
-		then
-			mv lua $rootd/lua/$V
+		cd lua-$V
+		if (( $(echo "$ver < 5.4" | bc -l) )); then
+			make $(uname -s | tr "[:upper:]" "[:lower:]") install \
+				$( [[ $rel < 1 ]] &&
+				echo "INSTALL_ROOT" || echo "INSTALL_TOP"  )=$rootd/lua/$V
 		else
-			[[ -e $rootd/lua/$V ]] &&
-				rm -fr $rootd/lua/$V && mv lua-$V $rootd/lua/$V ||
-				mv lua-$V $rootd/lua/$V
+			make all install \
+				INSTALL_TOP=$rootd/lua/$V
 		fi
 
 	else
